@@ -1,0 +1,4 @@
+stemcells:
+- alias: default
+  os: ubuntu-xenial
+  version: (( grab meta.stemcell_version || "621.latest" ))

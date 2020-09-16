@@ -1,0 +1,22 @@
+#!/bin/bash
+set -eu
+
+
+### ----------------------------------------------------------------------------
+### Main
+### ----------------------------------------------------------------------------
+
+(
+echo "---"
+echo "kit:"
+echo "  name:     $GENESIS_KIT_NAME"
+echo "  version:  $GENESIS_KIT_VERSION"
+echo "  features: []"
+
+genesis_config_block
+
+echo "params: []"
+
+) >$GENESIS_ROOT/$GENESIS_ENVIRONMENT.yml
+
+# vim:foldmethod=marker

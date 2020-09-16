@@ -1,0 +1,31 @@
+#!/bin/bash
+set -u
+#Version check
+min_version="2.7.0"
+genesis_version="$(genesis -v 2>&1 | grep '^Genesis v' | sed -e 's/Genesis v\(.*\) (.*$/\1/')"
+if ! [[ "$genesis_version" =~ -dev$ ]] && ! new_enough "$genesis_version" "$min_version" ; then
+  describe >&2 "" "#R{[ERROR]} This kit needs Genesis $min_version.  Please upgrade before continuing" ""
+  exit 1
+fi
+set -e
+
+declare -a manifest
+
+if [[ ! -f "$GENESIS_ROOT/ops/base.yml" ]] ; then
+  bail "#R{[ERROR]} Missing base operations file in /ops/."
+fi
+
+manifest+=( "base.yml" "$GENESIS_ROOT/ops/base.yml" )
+abort=
+for want in $GENESIS_REQUESTED_FEATURES; do
+  if [[ -f "$GENESIS_ROOT/ops/$want.yml" ]] ; then
+    manifest+=( "$GENESIS_ROOT/ops/$want.yml" )
+  else
+    abort=1
+    describe >&2 \
+      "#R{[ERROR]} The #c{$want} feature is invalid. See the ops directory for list of valid features."
+  fi
+done
+[[ "$abort" == "1" ]] && bail "#R{Cannot continue} - fix your #C{$GENESIS_ENVIRONMENT.yml} file to resolve these issues."
+
+echo "${manifest[@]}"
