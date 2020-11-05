@@ -1,0 +1,12 @@
+---
+name: generic
+version: 0.0.1
+authors:
+- Dennis Bell <dbell@starkandwayne.com>
+code:   https://github.com/genesis-community/generic-genesis-kit
+
+genesis_version_min: 2.7.6
+
+credentials: {}
+certificates: {}
+provided: {}
