@@ -1,8 +1,0 @@
-#!/bin/bash
-set -ue
-merge=( kit.yml)
-if [[ -f "$GENESIS_ROOT/kit.yml" ]] ; then
-  merge+=( "$GENESIS_ROOT/kit.yml" )
-fi
-
-spruce merge "${merge[@]}"
