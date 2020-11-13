@@ -1,0 +1,50 @@
+#!/bin/bash
+set -u
+
+#Version check
+min_version="2.7.6"
+genesis_version="$(genesis -v 2>&1 | grep '^Genesis v' | sed -e 's/Genesis v\(.*\) (.*$/\1/')"
+if ! [[ "$genesis_version" =~ -dev$ ]] && ! new_enough "$genesis_version" "$min_version" ; then
+  describe >&2 "" "#R{[ERROR]} This kit needs Genesis $min_version.  Please upgrade before continuing" ""
+  exit 1
+fi
+set -e
+
+list() {
+  addons=( $(shopt -s nullglob; [[ -d "$GENESIS_ROOT/addons" ]] && cd "$GENESIS_ROOT/addons" && echo * ) )
+  if [[ "${#addons[@]}" -eq 0 ]] ; then
+    describe "" \
+      "There are no addons defined for this Generic $GENESIS_TYPE Kit." \
+      "" \
+      "To provide addons, add an executable script to your #C{./addons/} directory;" \
+      "It must respond to the following first-position arguments:" \
+      "  #y{help} - provide the usage help text block" \
+      "  #y{run} - execute the addon's described behaviour" ""
+  else
+    describe "" "The following addons are defined for this kit:"
+    for addon in hooks/addon-*; do
+      describe "" "  #Gu{$(echo "$addon" | sed -e 's/.*\/addon\///')}"
+      $addon help | sed -e 's/^/    /'
+    done
+    echo
+  fi
+
+}
+
+case $GENESIS_ADDON_SCRIPT in
+list)
+  list
+  exit 0
+  ;;
+
+*)
+  if [[ -f "$GENESIS_ROOT/addon/$GENESIS_ADDON_SCRIPT" ]] ; then
+    (cd "$GENESIS_ROOT" && "addon/$GENESIS_ADDON_SCRIPT" run "$@")
+    exit $?
+  else
+    echo "Unrecognized addon '$GENESIS_ADDON_SCRIPT'."
+    list
+    exit 1
+  fi
+  ;;
+esac
