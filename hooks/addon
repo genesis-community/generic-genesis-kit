@@ -22,9 +22,9 @@ list() {
       "  #y{run} - execute the addon's described behaviour" ""
   else
     describe "" "The following addons are defined for this kit:"
-    for addon in hooks/addon-*; do
-      describe "" "  #Gu{$(echo "$addon" | sed -e 's/.*\/addon\///')}"
-      $addon help | sed -e 's/^/    /'
+    for addon in "${addons[@]}"; do
+      describe "" "  #Gu{$addon}"
+      $GENESIS_ROOT/addons/$addon help | sed -e 's/^/    /'
     done
     echo
   fi
@@ -38,8 +38,8 @@ list)
   ;;
 
 *)
-  if [[ -f "$GENESIS_ROOT/addon/$GENESIS_ADDON_SCRIPT" ]] ; then
-    (cd "$GENESIS_ROOT" && "addon/$GENESIS_ADDON_SCRIPT" run "$@")
+  if [[ -f "$GENESIS_ROOT/addons/$GENESIS_ADDON_SCRIPT" ]] ; then
+    (cd "$GENESIS_ROOT" && "addons/$GENESIS_ADDON_SCRIPT" run "$@")
     exit $?
   else
     echo "Unrecognized addon '$GENESIS_ADDON_SCRIPT'."
