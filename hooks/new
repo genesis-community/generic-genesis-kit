@@ -15,7 +15,7 @@ echo "  features: []"
 
 genesis_config_block
 
-echo "params: []"
+echo "params: {}"
 
 ) >$GENESIS_ROOT/$GENESIS_ENVIRONMENT.yml
 
