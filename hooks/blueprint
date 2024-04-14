@@ -11,11 +11,16 @@ set -e
 
 declare -a manifest
 
-if [[ ! -f "$GENESIS_ROOT/ops/base.yml" ]] ; then
-  bail "#R{[ERROR]} Missing base operations file in /ops/."
+base_ops_yml=
+if [[ -f "$GENESIS_ROOT/ops/base.yml" ]] ; then
+  base_ops_yml="ops/base.yml"
+elif [[ -n "$GENESIS_TYPE" && -f "$GENESIS_ROOT/ops/$GENESIS_TYPE.yml" ]] ; then
+  base_ops_yml="ops/$GENESIS_TYPE.yml"
+else
+  bail "#R{[ERROR]} Missing base operations file in /ops/ - expecting either base.yml or $GENESIS_TYPE.yml."
 fi
 
-manifest+=( "base.yml" )
+manifest+=( "base.yml" "$base_ops_yml" )
 [[ -f "$GENESIS_ROOT/ops/base.yml" ]] && manifest+=( "$GENESIS_ROOT/ops/base.yml" )
 abort=
 for want in $GENESIS_REQUESTED_FEATURES; do

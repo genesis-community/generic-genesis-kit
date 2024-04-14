@@ -17,6 +17,8 @@ genesis_config_block
 
 echo "params: {}"
 
-) >$GENESIS_ROOT/$GENESIS_ENVIRONMENT.yml
+) > "$GENESIS_ROOT/$GENESIS_ENVIRONMENT.yml"
+
+offer_environment_editor
 
 # vim:foldmethod=marker
