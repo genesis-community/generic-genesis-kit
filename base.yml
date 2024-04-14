@@ -1,4 +1,5 @@
 stemcells:
 - alias: default
-  os: ubuntu-xenial
-  version: (( grab meta.stemcell_version || "621.latest" ))
+  os:      (( grab params.stemcell_os || "ubuntu-jammy" ))
+  version: (( grab meta.stemcell_version || "latest" ))
+
