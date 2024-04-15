@@ -20,8 +20,7 @@ else
   bail "#R{[ERROR]} Missing base operations file in /ops/ - expecting either base.yml or $GENESIS_TYPE.yml."
 fi
 
-manifest+=( "base.yml" "$base_ops_yml" )
-[[ -f "$GENESIS_ROOT/ops/base.yml" ]] && manifest+=( "$GENESIS_ROOT/ops/base.yml" )
+manifest+=( "base.yml" "$GENESIS_ROOT/$base_ops_yml" )
 abort=
 for want in $GENESIS_REQUESTED_FEATURES; do
   if [[ -f "$GENESIS_ROOT/ops/$want.yml" ]] ; then
