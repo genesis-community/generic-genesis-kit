@@ -55,10 +55,10 @@ you can specify them in the `bosh-variables` block.
 Just create a `bosh-variables` block in the environment YAML file, and specify
 each variable as a key-value pair.
 
-### instance-groups block
+### instance_groups block
 
 Since the environment YAML file is just fragment of the overall bosh deployment
-manifest, you can specify the `instance-groups` block to customize any of the
+manifest, you can specify the `instance_groups` block to customize any of the
 instance groups in the manifest.  This is useful for specifying the number of
 instances, or the VM or persistant disk types for a particular instance group,
 or any other properties that are specific to an instance group.
