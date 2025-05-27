@@ -45,7 +45,7 @@ sub perform {
   # Offer environment editor
   run({ interactive => 1 }, 'offer_environment_editor');
 
-  return 1;
+  return $self->done();
 }
 
 # TODO: Create a templates directory with common patterns for different types of deployments:

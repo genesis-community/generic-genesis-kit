@@ -60,7 +60,7 @@ sub perform {
     $env->notify("No help text available for addon '#Gu{%s}'.", $addon_name);
   }
 
-  return $self->done(1);
+  return $self->done();
 }
 
 1;

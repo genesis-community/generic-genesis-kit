@@ -74,7 +74,7 @@ sub perform {
     info("\n#R{Deployment failed!}\n");
   }
 
-  return $self->done(1);
+  return $self->done();
 }
 
 # In post-deploy.pm

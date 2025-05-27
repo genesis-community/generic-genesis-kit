@@ -197,7 +197,7 @@ sub perform {
     $check_health->();
   }
 
-  return $self->done(1);
+  return $self->done();
 }
 
 1;

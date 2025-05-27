@@ -54,7 +54,7 @@ sub perform {
     $env->notify(error => "environment files [#R{FAILED}]");
   }
 
-  return $self->done($self->{ok});
+  return $self->done();
 }
 
 sub validate_properties {

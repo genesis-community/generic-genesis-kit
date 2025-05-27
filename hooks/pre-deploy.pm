@@ -47,7 +47,7 @@ sub perform {
   # You can add data here if needed in post-deploy
   close $fh;
 
-  return (1, ""); # Return success with no data
+  return $self->done();
 }
 
 sub detect_release_info {

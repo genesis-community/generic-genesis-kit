@@ -90,7 +90,7 @@ sub perform {
 
   $self->generate_documentation();
 
-  return $self->done(1);
+  return $self->done();
 }
 
 sub generate_documentation {
