@@ -1,11 +1,19 @@
 ---
-name: generic
+name:    generic
 version: 1.1.0
+code:    https://github.com/genesis-community/generic-genesis-kit
 authors:
 - Dennis Bell <dbell@starkandwayne.com>
-code:   https://github.com/genesis-community/generic-genesis-kit
 
 genesis_version_min: 2.8.10
+
+supports:
+- aws
+- azure
+- gcp
+- openstack
+- vsphere
+- stackit
 
 credentials: {}
 certificates: {}
