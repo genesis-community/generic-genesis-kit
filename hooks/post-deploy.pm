@@ -38,7 +38,7 @@ sub perform {
       "\n#M{%s} %s deployed!\n".
       "\nFor details about the deployment, run\n".
       "\t#G{%s info}\n",
-      $env->name, $genesis_type, $env->get_call_path_with_env
+      $env->name, $genesis_type, scalar($env->get_call_path_with_env)
     );
 
     # Display any available addon commands
@@ -52,7 +52,7 @@ sub perform {
         foreach my $addon (@addons) {
           my $addon_name = $addon;
           $addon_name =~ s{.*/}{};
-          info("  #G{%s do -- %s}", $env->get_call_path_with_env, $addon_name);
+          info("  #G{%s do -- %s}", scalar($env->get_call_path_with_env), $addon_name);
         }
         info("\n");
       }

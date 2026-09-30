@@ -80,7 +80,7 @@ sub perform {
         foreach my $addon (@addons) {
           my $addon_name = $addon;
           $addon_name =~ s{.*/}{};
-          info("  #G{%s do -- %s}", $env->get_call_path_with_env, $addon_name);
+          info("  #G{%s do -- %s}", scalar($env->get_call_path_with_env), $addon_name);
         }
       }
     }
