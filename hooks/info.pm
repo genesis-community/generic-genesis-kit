@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # vim: set ts=2 sw=2 sts=2 et:
-package Genesis::Hook::Info::Generic v1.0.0;
+package Genesis::Hook::Info::Generic v1.1.0;
 
 use strict;
 use warnings;
@@ -13,12 +13,12 @@ BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/
 use parent qw(Genesis::Hook);
 
 # Import required functions
-use Genesis qw/bail info run/;
+use Genesis qw/info/;
 
 sub init {
   my ($class, %ops) = @_;
   my $obj = $class->SUPER::init(%ops);
-  $obj->check_minimum_genesis_version('3.1.0-rc.20');
+  $obj->check_minimum_genesis_version('3.1.0');
   return $obj;
 }
 
@@ -88,45 +88,7 @@ sub perform {
     info("\nNo deployment information available.\n");
   }
 
-  $self->generate_documentation();
-
   return $self->done();
 }
-
-sub generate_documentation {
-  my ($self) = @_;
-  my $name = $self->env->lookup('params.name', 'generic');
-  my $doc_dir = "docs";
-
-  # Create docs directory if it doesn't exist
-  mkdir_or_fail($doc_dir) unless -d $doc_dir;
-
-  # Generate README
-  my $readme = "$doc_dir/README.md";
-  open my $fh, ">", $readme or bail("Could not open $readme for writing: $!");
-
-  print $fh "# $name Deployment\n\n";
-  print $fh "## Overview\n\n";
-  print $fh "This is a deployment of the $name BOSH release using the Genesis Generic Kit.\n\n";
-
-  # Add parameters documentation
-  print $fh "## Parameters\n\n";
-  my $params = $self->env->lookup('params', {});
-  foreach my $key (sort keys %$params) {
-    print $fh "- `$key`: " . ($params->{$key} || "Not set") . "\n";
-  }
-
-  # Add features documentation
-  print $fh "\n## Features\n\n";
-  foreach my $feature ($self->env->features) {
-    print $fh "- `$feature`\n";
-  }
-
-  close $fh;
-
-  $self->env->notify("Generated documentation at %s", $readme);
-  return 1;
-}
-
 
 1;

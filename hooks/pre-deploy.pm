@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # vim: set ts=2 sw=2 sts=2 foldmethod=marker
-package Genesis::Hook::PreDeploy::Generic v1.0.0;
+package Genesis::Hook::PreDeploy::Generic v1.1.0;
 
 use strict;
 use warnings;
@@ -10,125 +10,72 @@ use v5.20; # Genesis min perl version is 5.20
 BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/lib'}
 use parent qw(Genesis::Hook);
 
-use Genesis qw/info run bail/;
+use Genesis qw/bail load_yaml_file new_enough/;
+
+# bpm releases older than this cannot start jobs on the cgroup v2 hosts that
+# the resolute stemcell boots.
+my $RESOLUTE_MIN_BPM = '1.4.41';
 
 sub init {
   my ($class, %ops) = @_;
   my $obj = $class->SUPER::init(%ops);
-  $obj->check_minimum_genesis_version('3.1.0-rc.20');
+  $obj->check_minimum_genesis_version('3.1.0');
   return $obj;
 }
 
 sub perform {
   my ($self) = @_;
   my $env = $self->env;
-  my $genesis_type = $ENV{GENESIS_TYPE} || 'generic';
 
-  # Load manifest data
   my $manifest_file = $ENV{GENESIS_MANIFEST_FILE} || '';
-  my $vars_file = $ENV{GENESIS_BOSHVARS_FILE} || '';
+  bail(
+    "Manifest file '%s' not found or not specified", $manifest_file
+  ) unless $manifest_file && -f $manifest_file;
 
-  if (!$manifest_file || !-f $manifest_file) {
-    bail("Manifest file '%s' not found or not specified", $manifest_file);
-  }
+  $env->notify("running pre-deploy checks for %s environment...", $env->type || 'generic');
 
-  $env->notify("running pre-deploy checks for %s environment...", $genesis_type);
-
-  $self->detect_release_info();
-
-  $self->ensure_release_available();
-
-  # Here we would add any specific pre-deployment logic
-  # For now this is a placeholder for any pre-deployment tasks
-
-  # Create an empty data file for post-deploy to use
-  my $data_file = $env->workpath("data");
-  open my $fh, ">", $data_file or bail("Could not open $data_file for writing: $!");
-  # You can add data here if needed in post-deploy
-  close $fh;
+  my $manifest = load_yaml_file($manifest_file);
+  $self->_check_resolute($manifest);
 
   return $self->done(1);
 }
 
-sub detect_release_info {
-  my ($self) = @_;
-  my $name = $self->env->lookup('params.name', 'generic');
+# The deployment repo writes the manifest, so the kit cannot pin bpm itself.
+# Instead we refuse a resolute deploy that would ship a bpm too old to run
+# there, and one whose own stemcells block undoes the resolute feature.
+sub _check_resolute {
+  my ($self, $manifest) = @_;
 
-  # Check for release information in bosh.io
-  my ($out, $rc) = run('curl -s https://bosh.io/api/v1/releases/' . $name);
-  if ($rc == 0 && $out) {
-    my $release_info = decode_json($out);
-    # Suggest latest version if not specified
-    if (!$self->env->lookup('params.version')) {
-      info("Latest version of %s release is %s", $name, $release_info->{version});
-      # Optionally prompt for version selection
-    }
-    return $release_info;
-  }
-  return undef;
-}
+  my @stemcells = @{$manifest->{stemcells} || []};
+  my @resolute = grep {($_->{os} // '') eq 'ubuntu-resolute'} @stemcells;
 
-sub ensure_release_available {
-  my ($self) = @_;
-  my $name = $self->env->lookup('params.name', 'generic');
-  my $version = $self->env->lookup('params.version');
-  my $sha1 = $self->env->lookup('params.sha1');
-
-  if (!$version) {
-    $self->env->notify(error => "No version specified for %s release", $name);
-    return 0;
+  if ($self->want_feature('resolute')) {
+    my @other = grep {($_->{os} // '') ne 'ubuntu-resolute'} @stemcells;
+    bail(
+      "The #c{resolute} feature is enabled, but the manifest's stemcells " .
+      "block also names %s.  Remove those stemcells, or their os keys, from " .
+      "your ops files so that the feature sets the stemcell os.",
+      join(', ', map {sprintf("#R{%s} (alias %s)", $_->{os} // '<none>', $_->{alias} // '<none>')} @other)
+    ) if @other;
   }
 
-  # Check if release exists in BOSH director
-  my ($out, $rc) = run('bosh releases --json');
-  if ($rc == 0) {
-    my $releases = decode_json($out);
-    foreach my $release (@{$releases->{Tables}[0]{Rows}}) {
-      if ($release->{name} eq $name && $release->{version} eq $version) {
-        return 1; # Release already available
-      }
-    }
-  }
+  return unless @resolute;
 
-  # Download release if not available
-  my $url = "https://bosh.io/d/github.com/$name/$name-release?v=$version";
-  $self->env->notify("Downloading %s release v%s...", $name, $version);
-  run('curl -L -o /tmp/%s-%s.tgz %s', $name, $version, $url);
+  for my $release (@{$manifest->{releases} || []}) {
+    next unless ($release->{name} // '') eq 'bpm';
+    my $version = $release->{version} // '';
+    bail(
+      "The manifest deploys bpm #R{latest} on a resolute stemcell.  Pin bpm " .
+      "to %s or newer in your ops files, so the deploy cannot pick up an " .
+      "older upload.", $RESOLUTE_MIN_BPM
+    ) if $version eq 'latest';
 
-  # Verify checksum if provided
-  if ($sha1) {
-    my ($sum, $rc) = run('sha1sum /tmp/%s-%s.tgz | cut -d " " -f 1', $name, $version);
-    if ($sum ne $sha1) {
-      $self->env->notify(error => "SHA1 mismatch for downloaded release");
-      return 0;
-    }
-  }
-
-  # Upload to BOSH
-  run('bosh upload-release /tmp/%s-%s.tgz', $name, $version);
-  return 1;
-}
-
-# This is an idea for improving the generic kit, the ops files
-# named below are just examples that we can discuss
-sub generate_ops_files {
-  my ($self) = @_;
-  my $name = $self->env->lookup('params.name', 'generic');
-  my $params = $self->env->lookup('params', {});
-
-  # Generate standard ops files if they don't exist
-  my @standard_ops = ('scaling', 'ha', 'tls', 'networking');
-  foreach my $op (@standard_ops) {
-    my $ops_file = "ops/$op.yml";
-    if (!-f $ops_file) {
-      my $template = slurp("templates/$op.yml.erb");
-      # Replace placeholders with values from params
-      $template =~ s/\{\{name\}\}/$name/g;
-      # Add more replacements as needed
-
-      mkfile_or_fail($ops_file, $template);
-      $self->env->notify("Generated ops file: %s", $ops_file);
-    }
+    (my $base_version = $version) =~ s/[+-].*$//;
+    bail(
+      "The manifest deploys bpm #R{%s} on a resolute stemcell, which needs " .
+      "bpm %s or newer.  Raise the bpm release in your ops files.",
+      $version, $RESOLUTE_MIN_BPM
+    ) unless $base_version =~ /^\d+(\.\d+)*$/ && new_enough($base_version, $RESOLUTE_MIN_BPM);
   }
 }
 

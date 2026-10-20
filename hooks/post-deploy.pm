@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # vim: set ts=2 sw=2 sts=2 foldmethod=marker
-package Genesis::Hook::PostDeploy::Generic v1.0.0;
+package Genesis::Hook::PostDeploy::Generic v1.1.0;
 
 use strict;
 use warnings;
@@ -9,12 +9,12 @@ use v5.20; # Genesis min perl version is 5.20
 BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/lib'}
 use parent qw(Genesis::Hook::PostDeploy);
 
-use Genesis qw/info/;
+use Genesis qw/info read_json_from/;
 
 sub init {
   my ($class, %ops) = @_;
   my $self = $class->SUPER::init(%ops);
-  $self->check_minimum_genesis_version('3.1.0-rc.20');
+  $self->check_minimum_genesis_version('3.1.0');
   return $self;
 }
 
@@ -77,36 +77,34 @@ sub perform {
   return $self->done();
 }
 
-# In post-deploy.pm
 sub monitor_deployment_health {
   my ($self) = @_;
-  if (!$self->deploy_successful) {
-    return;
+  return unless $self->deploy_successful;
+
+  my $env = $self->env;
+  my $deployment_name = $env->deployment_name;
+
+  my ($out, $rc) = $env->bosh->execute(
+    {interactive => 0, deployment => $deployment_name},
+    'instances', '--json'
+  );
+  return unless $rc == 0;
+
+  my $instances = read_json_from($out);
+  my $total = 0;
+  my $healthy = 0;
+  foreach my $instance (@{$instances->{Tables}[0]{Rows} || []}) {
+    $total++;
+    $healthy++ if ($instance->{process_state} // '') eq 'running';
   }
 
-  my $name = $self->env->lookup('params.name', 'generic');
-  my $deployment_name = $self->env->deployment_name;
+  my $health_percentage = $total > 0 ? int(($healthy / $total) * 100) : 0;
+  $env->notify("Deployment health: %d%% (%d/%d instances running)",
+               $health_percentage, $healthy, $total);
 
-  # Check deployment health
-  my ($out, $rc) = run('bosh -d %s instances --json', $deployment_name);
-  if ($rc == 0) {
-    my $instances = decode_json($out);
-    my $total = 0;
-    my $healthy = 0;
-
-    foreach my $instance (@{$instances->{Tables}[0]{Rows}}) {
-      $total++;
-      $healthy++ if $instance->{process_state} eq 'running';
-    }
-
-    my $health_percentage = $total > 0 ? int(($healthy / $total) * 100) : 0;
-    $self->env->notify("Deployment health: %d%% (%d/%d instances running)",
-                       $health_percentage, $healthy, $total);
-
-    if ($health_percentage < 100) {
-      $self->env->notify(warning => "Not all instances are healthy. Run 'bosh -d %s instances' for details.",
-                         $deployment_name);
-    }
+  if ($health_percentage < 100) {
+    $env->notify(warning => "Not all instances are healthy. Run 'bosh -d %s instances' for details.",
+                 $deployment_name);
   }
 }
 

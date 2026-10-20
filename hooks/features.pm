@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # vim: set ts=2 sw=2 sts=2 foldmethod=marker
-package Genesis::Hook::Features::Generic v1.0.0;
+package Genesis::Hook::Features::Generic v1.1.0;
 
 use strict;
 use warnings;
@@ -15,27 +15,28 @@ use Genesis qw/bail/;
 sub init {
   my $class = shift;
   my $obj = $class->SUPER::init(@_);
-  $obj->check_minimum_genesis_version('3.1.0-rc.20');
+  $obj->check_minimum_genesis_version('3.1.0');
   return $obj;
 }
 
 sub perform {
   my ($self) = @_;
-  my $genesis_root = $ENV{GENESIS_ROOT};
-  my $name = $self->env->lookup('params.name', 'generic');
+  my $ops_dir = $self->env->lookup('genesis.ops_dir', 'ops');
 
+  # Features name ops files in the deployment repo, except for resolute,
+  # which the kit provides itself.
   foreach my $feature (@{$self->{features}}) {
-    if (-f "$genesis_root/ops/$feature.yml") {
+    if ($feature eq 'resolute' || -f $self->env->path("$ops_dir/$feature.yml")) {
       $self->add_feature($feature);
     } else {
       bail(
-        "Feature [%s] is invalid. The ops file %s/ops/%s.yml does not exist.",
-        $feature, $genesis_root, $feature
+        "Feature [%s] is invalid. The ops file %s does not exist.",
+        $feature, $self->env->path("$ops_dir/$feature.yml")
       );
     }
   }
 
-  return $self->done($self->{features});
+  return $self->done();
 }
 
 1;

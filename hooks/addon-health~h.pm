@@ -1,22 +1,22 @@
 #!/usr/bin/env perl
 # vim: set ts=2 sw=2 sts=2 foldmethod=marker
-package Genesis::Hook::Addon::Generic::Health v1.0.0;
+package Genesis::Hook::Addon::Generic::Health v1.1.0;
 
 use strict;
 use warnings;
 use v5.20; # Genesis min perl version is 5.20
+use utf8;
 
 # Only needed for development
 BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/lib'}
 use parent qw(Genesis::Hook::Addon);
 
-use Genesis qw/bail info run/;
-use JSON::PP;
+use Genesis qw/info read_json_from/;
 
 sub init {
   my $class = shift;
   my $obj = $class->SUPER::init(@_);
-  $obj->check_minimum_genesis_version('3.1.0-rc.20');
+  $obj->check_minimum_genesis_version('3.1.0');
   return $obj;
 }
 
@@ -48,7 +48,7 @@ sub perform {
   }
 
   # Get the release name from params
-  my $name = $env->lookup('params.name', 'generic');
+  my $name = $env->type || 'generic';
   my $deployment_name = $env->deployment_name;
 
   # Check deployment state
@@ -62,27 +62,27 @@ sub perform {
   # Function to check health - wrapped in a sub for watch mode
   my $check_health = sub {
     # Check if BOSH director is accessible
-    my ($director_check, $rc) = run('bosh environment');
-    if ($rc != 0) {
+    my (undef, $env_rc) = $env->bosh->execute({interactive => 0}, 'environment');
+    if ($env_rc != 0) {
       $env->notify(error => "Cannot connect to BOSH director. Please make sure you're logged in.");
       return 0;
     }
 
     # Get deployment instances
     $env->notify("Checking health of %s deployment (%s)...", $name, $deployment_name);
-    my ($out, $rc) = run('bosh -d %s instances --details --json', $deployment_name);
+    my ($out, $rc, $err) = $env->bosh->execute(
+      {interactive => 0, deployment => $deployment_name},
+      'instances', '--details', '--json'
+    );
     if ($rc != 0) {
-      $env->notify(error => "Failed to get deployment instances. Error: %s", $out);
+      $env->notify(error => "Failed to get deployment instances. Error: %s", $err || $out);
       return 0;
     }
 
     # Parse JSON output
-    my $instances_data;
-    eval {
-      $instances_data = decode_json($out);
-    };
-    if ($@) {
-      $env->notify(error => "Failed to parse BOSH output: %s", $@);
+    my ($instances_data, undef, $json_err) = read_json_from($out);
+    if ($json_err) {
+      $env->notify(error => "Failed to parse BOSH output: %s", $json_err);
       return 0;
     }
 
@@ -94,24 +94,20 @@ sub perform {
     my $failing = 0;
     my @failing_instances;
 
-    foreach my $instance (@rows) {
-      my $is_healthy = ($instance->{process_state} eq 'running' &&
-                        $instance->{active} eq 'true' &&
-                        $instance->{state} eq 'started');
+    # The BOSH CLI names each row by its instance, as <group>/<id>, and
+    # reports process_state and state but no active flag.
+    my $is_healthy = sub {
+      my ($instance) = @_;
+      return ($instance->{process_state} // '') eq 'running'
+          && ($instance->{state} // '') eq 'started';
+    };
 
-      if ($is_healthy) {
+    foreach my $instance (@rows) {
+      if ($is_healthy->($instance)) {
         $healthy++;
       } else {
         $failing++;
-        push @failing_instances, {
-          name => $instance->{instance},
-          job => $instance->{job},
-          process_state => $instance->{process_state},
-          state => $instance->{state},
-          active => $instance->{active},
-          vm_type => $instance->{vm_type},
-          ips => $instance->{ips},
-        };
+        push @failing_instances, $instance;
       }
     }
 
@@ -131,10 +127,11 @@ sub perform {
     if ($failing > 0) {
       info("#R{Unhealthy instances:}");
       foreach my $instance (@failing_instances) {
-        info("\t#C{%s/%s}: #R{%s} (state: %s, active: %s, IP: %s\n)",
-          $instance->{job}, $instance->{name},
-          $instance->{process_state}, $instance->{state},
-          $instance->{active}, $instance->{ips});
+        info("\t#C{%s}: #R{%s} (state: %s, IP: %s)",
+          $instance->{instance} // '<unknown>',
+          $instance->{process_state} // '<unknown>',
+          $instance->{state} // '<unknown>',
+          $instance->{ips} // '');
       }
       info("\n");
     }
@@ -143,22 +140,16 @@ sub perform {
     if ($options{verbose} && $total > 0) {
       info("#Y{Instance details:}");
       foreach my $instance (@rows) {
-        my $health_indicator = (
-          $instance->{process_state} eq 'running' &&
-          $instance->{active} eq 'true' &&
-          $instance->{state} eq 'started'
-        ) ? "#G{✓}" : "#R{✗}";
-
         info(
-          "\t%s #C{%s/%s} [%s] - #Y{%s} (%s)\n",
-          $health_indicator,
-          $instance->{job},
-          $instance->{name},
-          $instance->{vm_type},
-          $instance->{ips},
-          $instance->{az}
+          "\t%s #C{%s} [%s] - #Y{%s} (%s)",
+          $is_healthy->($instance) ? "#G{✓}" : "#R{✗}",
+          $instance->{instance} // '<unknown>',
+          $instance->{vm_type} // '',
+          $instance->{ips} // '',
+          $instance->{az} // ''
         );
       }
+      info("");
     }
 
     # Provide recommendations if not fully healthy

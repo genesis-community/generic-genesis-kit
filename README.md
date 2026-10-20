@@ -13,3 +13,7 @@ Finally, if you want to add functionality via scripts that operate on specific e
 
 You will use `genesis init -k generic <name>` to create a new `<name>-deployments>` directory for your deployments repository.  It will also set the deployment type to `<name>` so that your deployments will be named `<env>-<name>` instead of `<env>-generic`.  Once initialized, copy the base manifest into ops/base.yml, then run `genesis new <env>` to create your first environment file.
 
+
+## Resolute
+
+Add the `resolute` feature to an environment to deploy it on the Ubuntu resolute stemcell. The kit refuses the deploy when the manifest pins bpm older than 1.4.41 or names another stemcell os, and `MANUAL.md` explains both checks.

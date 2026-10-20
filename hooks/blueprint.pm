@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # vim: set ts=2 sw=2 sts=2 foldmethod=marker
-package Genesis::Hook::Blueprint::Generic v1.0.0;
+package Genesis::Hook::Blueprint::Generic v1.1.0;
 
 use strict;
 use warnings;
@@ -8,78 +8,83 @@ use v5.20; # Genesis min perl version is 5.20
 
 # Only needed for development
 BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/lib'}
-use parent qw(Genesis::Hook);
+use parent qw(Genesis::Hook::Blueprint);
 
 use Genesis qw/bail info/;
 
 sub init {
   my $class = shift;
   my $obj = $class->SUPER::init(@_);
-  $obj->{files} = [];
-  $obj->check_minimum_genesis_version('3.1.0-rc.20');
+  $obj->check_minimum_genesis_version('3.1.0');
   return $obj;
 }
 
 sub perform {
   my ($self) = @_;
+  return 1 if $self->completed;
+
   my $env = $self->env;
-  my @manifest = ();
+  my $ops_dir = $self->ops_dir;
+  my $type = $env->type;
 
-  # Find base operations file
-  my $base_ops_yml = '';
-  my $genesis_root = $ENV{GENESIS_ROOT};
-  my $name = $self->env->lookup('params.name', 'generic');
-
-  if (-f "$genesis_root/ops/base.yml") {
-    $base_ops_yml = "ops/base.yml";
-  } elsif ($name && -f "$genesis_root/ops/$name.yml") {
-    $base_ops_yml = "ops/$name.yml";
+  # The deployment repo supplies the manifest, as ops/base.yml or as
+  # ops/<type>.yml, where <type> is the name given to `genesis init`.
+  my $base_ops_yml;
+  if (-f $env->path("$ops_dir/base.yml")) {
+    $base_ops_yml = "$ops_dir/base.yml";
+  } elsif ($type && -f $env->path("$ops_dir/$type.yml")) {
+    $base_ops_yml = "$ops_dir/$type.yml";
   } else {
-    bail("#R{[ERROR]} Missing base operations file in /ops/ - expecting either base.yml or $name.yml.");
+    bail(
+      "#R{[ERROR]} Missing base operations file in %s/ - expecting either base.yml or %s.yml.",
+      $ops_dir, $type || '<type>'
+    );
   }
 
-  push @manifest, "base.yml", "$genesis_root/$base_ops_yml";
+  $self->add_files('base.yml', $env->path($base_ops_yml));
 
-  # Add jobs ops files
-  my $job_ops_files = $self->determine_jobs();
-  if ($job_ops_files) {
-    push @manifest, @$job_ops_files;
-  }
-
-  # Add feature-specific ops files
+  # Every other feature names an ops file in the deployment repo.  The
+  # resolute feature is the kit's own, though the repo may still add an
+  # ops/resolute.yml to go with it.
   my $abort = 0;
   for my $feature ($self->features) {
-    if (-f "$genesis_root/ops/$feature.yml") {
-      push @manifest, "$genesis_root/ops/$feature.yml";
-    } else {
+    my $ops_file = $env->path("$ops_dir/$feature.yml");
+    if (-f $ops_file) {
+      $self->add_files($ops_file);
+    } elsif ($feature ne 'resolute') {
       $abort = 1;
       info("#R{[ERROR]} The #c{%s} feature is invalid. See the ops directory for list of valid features.", $feature);
     }
   }
 
-  if ($abort) {
-    bail("#R{Cannot continue} - fix your #C{%s.yml} file to resolve these issues.", $env->name);
-  }
+  bail(
+    "#R{Cannot continue} - fix your #C{%s.yml} file to resolve these issues.",
+    $env->name
+  ) if $abort;
 
-  return \@manifest;
+  $self->_process_resolute;
+
+  return $self->done(1);
 }
 
-sub determine_jobs {
+sub _process_resolute {
   my ($self) = @_;
-  my $name = $self->env->lookup('params.name', 'generic');
-  my $release_info = $self->detect_release_info();
 
-  if ($release_info && $release_info->{jobs}) {
-    # Add jobs based on release info
-    my @job_ops_files = ();
-    foreach my $job (@{$release_info->{jobs}}) {
-      if (-f "ops/jobs/$job.yml") {
-        push @job_ops_files, "ops/jobs/$job.yml";
-      }
-    }
-    return \@job_ops_files;
+  if ($self->want_feature('resolute')) {
+    my $stemcell_os = $self->env->lookup('params.stemcell_os', 'ubuntu-resolute');
+    bail(
+      "The #c{resolute} feature sets the stemcell os to ubuntu-resolute, but " .
+      "the environment sets #c{params.stemcell_os} to #R{%s}.  " .
+      "Remove that parameter.", $stemcell_os
+    ) if $stemcell_os ne 'ubuntu-resolute';
+    $self->add_files('manifests/resolute.yml');
+  } elsif ($self->env->lookup('params.stemcell_os', 'ubuntu-jammy') eq 'ubuntu-resolute') {
+    bail(
+      "The environment sets #c{params.stemcell_os} to ubuntu-resolute " .
+      "without the #c{resolute} feature.  Enable the feature and remove " .
+      "that parameter."
+    );
   }
-  return [];
 }
 
 1;

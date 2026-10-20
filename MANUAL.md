@@ -6,7 +6,7 @@ don't need a dedicated kit.
 
 ## Usage
 
-To use this kit, you will need to create a new genesis repsitory using the
+To use this kit, you will need to create a new genesis repository using the
 `genesis init -k generic` command.  You can then copy your bosh deployment
 manifest and any operations files into the ops subdirectory of the new
 deployment repository.
@@ -45,10 +45,28 @@ if you want to reference them in files in the `ops` directory, by using the
 already use bosh variables for this purpose, it is easier just to use the
 `bosh-variables` block.
 
+### features
+
+Each feature in the environment file names an ops file in the `ops` directory, and the kit merges those files in the order the features are listed, after `ops/base.yml`.  The one exception is `resolute`, which the kit provides itself.
+
+### The resolute feature
+
+The `resolute` feature deploys on the Ubuntu resolute stemcell.  It sets `params.stemcell_os` to `ubuntu-resolute`, and the version still comes from `params.stemcell_version`, which should name a resolute stemcell such as `0.184`.  If the repository also has an `ops/resolute.yml`, the kit merges it in the feature's place, which is a good spot for release bumps that resolute needs.
+
+Because the deployment repository writes the manifest, the kit can't change its releases, so it checks them before each deploy instead.  It refuses a resolute deploy in these cases:
+
+- An environment sets `params.stemcell_os` to anything other than `ubuntu-resolute` alongside the feature, or sets it to `ubuntu-resolute` without the feature.
+
+- The manifest names a stemcell with a different os, which happens when an ops file carries its own `stemcells` block.  Remove that block, or its `os` key, and let the feature set it.
+
+- The manifest deploys bpm older than 1.4.41, or bpm `latest`.  Older bpm releases can't start jobs on resolute's cgroup v2 hosts, so pin bpm 1.4.41 or newer in your ops files.
+
+Other releases need their own check.  Any job that drops privileges with `chpst` from runit won't start on resolute, because the stemcell no longer ships runit, so use releases that start their jobs through bpm or `setpriv`.
+
 ### bosh-variables block
 
 The `bosh-variables` block is used to specify the variables that are passed to
-the bosh director when deploying the manifest.  Ranther than have a separate
+the bosh director when deploying the manifest.  Rather than have a separate
 file for bosh variables, or specifying them individually in the deploy command,
 you can specify them in the `bosh-variables` block.
 
@@ -57,11 +75,23 @@ each variable as a key-value pair.
 
 ### instance_groups block
 
-Since the environment YAML file is just fragment of the overall bosh deployment
+Since the environment YAML file is just a fragment of the overall bosh deployment
 manifest, you can specify the `instance_groups` block to customize any of the
 instance groups in the manifest.  This is useful for specifying the number of
-instances, or the VM or persistant disk types for a particular instance group,
+instances, or the VM or persistent disk types for a particular instance group,
 or any other properties that are specific to an instance group.
+
+### addons
+
+Put executable scripts in the repository's `addons/` directory to give an environment its own addons.  Each script must answer `help` with its usage text and `run` with its action.  Run one with `genesis <env> do <script> [args...]`, or with `genesis <env> do execute <script> [args...]`.
+
+The kit also provides these addons:
+
+- `health`, or `h`
+  Reports whether every instance in the deployment is running.  Add `--verbose` to list each instance, or `--watch` to check every five seconds.
+
+- `usage <script>`, or `u`
+  Prints the help text of a script in `addons/`.
 
 ## NOTE:
 
