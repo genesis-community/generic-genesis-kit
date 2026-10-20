@@ -47,19 +47,21 @@ already use bosh variables for this purpose, it is easier just to use the
 
 ### features
 
-Each feature in the environment file names an ops file in the `ops` directory, and the kit merges those files in the order the features are listed, after `ops/base.yml`.  The one exception is `resolute`, which the kit provides itself.
+Each feature in the environment file names an ops file in the `ops` directory, and the kit merges those files in the order the features are listed, after `ops/base.yml` or `ops/<type>.yml`.  The one exception is `resolute`, which the kit provides itself.
 
 ### The resolute feature
 
-The `resolute` feature deploys on the Ubuntu resolute stemcell.  It sets `params.stemcell_os` to `ubuntu-resolute`, and the version still comes from `params.stemcell_version`, which should name a resolute stemcell such as `0.184`.  If the repository also has an `ops/resolute.yml`, the kit merges it in the feature's place, which is a good spot for release bumps that resolute needs.
+The `resolute` feature deploys on the Ubuntu resolute stemcell.  It sets `params.stemcell_os` to `ubuntu-resolute`, and the version comes from `params.stemcell_version`, or from `meta.stemcell_version` when the params key isn't set.  Quote the version, as in `stemcell_version: "0.184"`, because YAML would otherwise read it as a number.  Check parent environment files too, since a jammy version left in one of them would break a resolute deploy.  If the repository also has an `ops/resolute.yml`, the kit merges it in the feature's place, which is a good spot for release bumps that resolute needs.
+
+The kit refuses to build the manifest when an environment sets `params.stemcell_os` to anything other than `ubuntu-resolute` alongside the feature, or sets it to `ubuntu-resolute` without the feature.  That check runs whenever the manifest is built, so `genesis manifest` and `genesis check` report it as well as `genesis deploy`.
 
 Because the deployment repository writes the manifest, the kit can't change its releases, so it checks them before each deploy instead.  It refuses a resolute deploy in these cases:
 
-- An environment sets `params.stemcell_os` to anything other than `ubuntu-resolute` alongside the feature, or sets it to `ubuntu-resolute` without the feature.
+- The manifest names a stemcell with a different os, which happens when an ops file carries its own `stemcells` block.  Remove that block, or its `os` and `name` keys, and let the feature set it.
 
-- The manifest names a stemcell with a different os, which happens when an ops file carries its own `stemcells` block.  Remove that block, or its `os` key, and let the feature set it.
+- The manifest deploys bpm older than 1.4.41, bpm `latest`, or bpm with no version.  Older bpm releases don't compile on resolute, because their tini package needs an older CMake, so pin bpm 1.4.41 or newer in your ops files.
 
-- The manifest deploys bpm older than 1.4.41, or bpm `latest`.  Older bpm releases can't start jobs on resolute's cgroup v2 hosts, so pin bpm 1.4.41 or newer in your ops files.
+- A stemcell or bpm value is a `((variable))` that the `bosh-variables` block doesn't set, so the kit can't tell what it deploys.
 
 Other releases need their own check.  Any job that drops privileges with `chpst` from runit won't start on resolute, because the stemcell no longer ships runit, so use releases that start their jobs through bpm or `setpriv`.
 
@@ -70,12 +72,12 @@ the bosh director when deploying the manifest.  Rather than have a separate
 file for bosh variables, or specifying them individually in the deploy command,
 you can specify them in the `bosh-variables` block.
 
-Just create a `bosh-variables` block in the environment YAML file, and specify
+Create a `bosh-variables` block in the environment YAML file, and specify
 each variable as a key-value pair.
 
 ### instance_groups block
 
-Since the environment YAML file is just a fragment of the overall bosh deployment
+Since the environment YAML file is a fragment of the overall bosh deployment
 manifest, you can specify the `instance_groups` block to customize any of the
 instance groups in the manifest.  This is useful for specifying the number of
 instances, or the VM or persistent disk types for a particular instance group,
@@ -83,15 +85,20 @@ or any other properties that are specific to an instance group.
 
 ### addons
 
-Put executable scripts in the repository's `addons/` directory to give an environment its own addons.  Each script must answer `help` with its usage text and `run` with its action.  Run one with `genesis <env> do <script> [args...]`, or with `genesis <env> do execute <script> [args...]`.
+Put executable scripts in the repository's `addons/` directory to give an environment its own addons.  Each script must answer `help` with its usage text and `run` with its action.  Run one with `genesis <env> do <script> [args...]`, or with `genesis <env> do execute <script> [args...]`.  Genesis keeps `-h` and `--help` for itself, so a script never sees those two arguments.
 
 The kit also provides these addons:
 
 - `health`, or `h`
-  Reports whether every instance in the deployment is running.  Add `--verbose` to list each instance, or `--watch` to check every five seconds.
+  Reports whether every instance in the deployment is running, and exits non-zero when one isn't.  Add `--verbose` to list each instance, or `--watch` to check every five seconds.
 
 - `usage <script>`, or `u`
-  Prints the help text of a script in `addons/`.
+  Prints the help text of a script in `addons/`, or lists every script when no name is given.
+
+- `execute <script>`, or `e`
+  Runs a script in `addons/`, which helps when the script's name matches one of the kit's addons.
+
+The kit's addons win over repository scripts with the same name, so a script called `health`, `h`, `usage`, `u`, `execute`, `e`, `list`, or `help` only runs through `do execute`.
 
 ## NOTE:
 

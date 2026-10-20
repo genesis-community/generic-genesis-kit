@@ -9,7 +9,7 @@ use v5.20; # Genesis min perl version is 5.20
 BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/lib'}
 use parent qw(Genesis::Hook::PostDeploy);
 
-use Genesis qw/info read_json_from/;
+use Genesis qw/info read_json_from warning/;
 
 sub init {
   my ($class, %ops) = @_;
@@ -84,13 +84,16 @@ sub monitor_deployment_health {
   my $env = $self->env;
   my $deployment_name = $env->deployment_name;
 
-  my ($out, $rc) = $env->bosh->execute(
+  # The deploy has already succeeded, so a failed health read only warns.
+  my ($out, $rc, $err) = $env->bosh->execute(
     {interactive => 0, deployment => $deployment_name},
     'instances', '--json'
   );
-  return unless $rc == 0;
-
-  my $instances = read_json_from($out);
+  my ($instances, $json_err) = read_json_from($out, $rc, $err);
+  if (!$instances || $json_err) {
+    warning("Could not read the instance health of %s: %s", $deployment_name, $json_err || 'no output');
+    return;
+  }
   my $total = 0;
   my $healthy = 0;
   foreach my $instance (@{$instances->{Tables}[0]{Rows} || []}) {

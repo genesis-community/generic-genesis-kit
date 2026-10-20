@@ -10,7 +10,7 @@ use v5.20; # Genesis min perl version is 5.20
 BEGIN {push @INC, $ENV{GENESIS_LIB} ? $ENV{GENESIS_LIB} : $ENV{HOME}.'/.genesis/lib'}
 use parent qw(Genesis::Hook::Blueprint);
 
-use Genesis qw/bail info/;
+use Genesis qw/bail warning/;
 
 sub init {
   my $class = shift;
@@ -43,26 +43,16 @@ sub perform {
 
   $self->add_files('base.yml', $env->path($base_ops_yml));
 
-  # Every other feature names an ops file in the deployment repo.  The
-  # resolute feature is the kit's own, though the repo may still add an
-  # ops/resolute.yml to go with it.
-  my $abort = 0;
+  # Every other feature names an ops file in the deployment repo, which the
+  # features hook has already confirmed.  The resolute feature is the kit's
+  # own, though the repo may still add an ops/resolute.yml to go with it.
   for my $feature ($self->features) {
     my $ops_file = $env->path("$ops_dir/$feature.yml");
-    if (-f $ops_file) {
-      $self->add_files($ops_file);
-    } elsif ($feature ne 'resolute') {
-      $abort = 1;
-      info("#R{[ERROR]} The #c{%s} feature is invalid. See the ops directory for list of valid features.", $feature);
-    }
+    $self->add_files($ops_file) if -f $ops_file;
   }
 
-  bail(
-    "#R{Cannot continue} - fix your #C{%s.yml} file to resolve these issues.",
-    $env->name
-  ) if $abort;
-
   $self->_process_resolute;
+  $self->_check_stemcell_version;
 
   return $self->done(1);
 }
@@ -85,6 +75,19 @@ sub _process_resolute {
       "that parameter."
     );
   }
+}
+
+# base.yml reads params.stemcell_version first and meta.stemcell_version
+# second, so a stale params value in a parent file now wins over meta.
+sub _check_stemcell_version {
+  my ($self) = @_;
+  my $params_version = $self->env->lookup('params.stemcell_version', undef);
+  my $meta_version   = $self->env->lookup('meta.stemcell_version', undef);
+  warning(
+    "The environment sets #c{params.stemcell_version} to #y{%s} and " .
+    "#c{meta.stemcell_version} to #y{%s}.  The kit deploys the params value, " .
+    "so remove whichever one is stale.", $params_version, $meta_version
+  ) if defined($params_version) && defined($meta_version) && "$params_version" ne "$meta_version";
 }
 
 1;

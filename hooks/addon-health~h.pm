@@ -184,11 +184,11 @@ sub perform {
       $env->notify("Health monitoring stopped.");
     }
   } else {
-    # Run health check once
-    $check_health->();
+    # Run health check once, and fail unless every instance is healthy
+    return $self->done($check_health->() ? 1 : 0);
   }
 
-  return $self->done();
+  return $self->done(1);
 }
 
 1;
